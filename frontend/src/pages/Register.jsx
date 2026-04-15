@@ -22,11 +22,41 @@ const Register = () => {
     const navigate = useNavigate();
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' }); // Field-level errors
+
+    // ========================================================================
+    // REGEX PATTERNS — Email & Password validation
+    // ========================================================================
+    // Email regex: must be a valid email format (supports Gmail & other providers)
+    const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    // Password regex: min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit, 1 special char
+    const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+    // --- FIELD-LEVEL VALIDATION ---
+    const validateField = (field, value) => {
+        let errorMsg = '';
+        if (field === 'email') {
+            if (!value.trim()) errorMsg = 'Email is required';
+            else if (!EMAIL_REGEX.test(value)) errorMsg = 'Enter a valid email (e.g., name@gmail.com)';
+        }
+        if (field === 'password') {
+            if (!value) errorMsg = 'Password is required';
+            else if (!PASSWORD_REGEX.test(value)) errorMsg = 'Min 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char (@$!%*?&)';
+        }
+        setFieldErrors(prev => ({ ...prev, [field]: errorMsg }));
+        return errorMsg === '';
+    };
 
     // --- FORM SUBMISSION EVENT HANDLER ---
     const handleSubmit = async (e) => {
         e.preventDefault();          // Prevent default browser form submission
         setError('');
+
+        // Validate all fields with regex before submitting
+        const isEmailValid = validateField('email', email);
+        const isPasswordValid = validateField('password', password);
+        if (!isEmailValid || !isPasswordValid) return;
+
         setLoading(true);
         try {
             await register(name, email, password, role); // Ajax POST to server
@@ -114,12 +144,13 @@ const Register = () => {
                         <input
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@example.com"
+                            onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) validateField('email', e.target.value); }}
+                            onBlur={() => validateField('email', email)}
+                            placeholder="you@gmail.com"
                             required
                             style={{
                                 background: 'var(--input-bg)',
-                                border: '1px solid var(--border)',
+                                border: fieldErrors.email ? '1px solid var(--danger)' : '1px solid var(--border)',
                                 color: 'var(--text)',
                                 width: '100%',
                                 padding: '1rem',
@@ -127,9 +158,9 @@ const Register = () => {
                                 outline: 'none',
                                 fontFamily: 'inherit'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                            onFocus={(e) => e.target.style.borderColor = fieldErrors.email ? 'var(--danger)' : 'var(--primary)'}
                         />
+                        {fieldErrors.email && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{fieldErrors.email}</p>}
                     </div>
 
                     {/* INPUT TYPE: password — hides typed characters (HTML5) */}
@@ -138,12 +169,13 @@ const Register = () => {
                         <input
                             type="password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e) => { setPassword(e.target.value); if (fieldErrors.password) validateField('password', e.target.value); }}
+                            onBlur={() => validateField('password', password)}
                             placeholder="••••••••"
                             required
                             style={{
                                 background: 'var(--input-bg)',
-                                border: '1px solid var(--border)',
+                                border: fieldErrors.password ? '1px solid var(--danger)' : '1px solid var(--border)',
                                 color: 'var(--text)',
                                 width: '100%',
                                 padding: '1rem',
@@ -151,9 +183,9 @@ const Register = () => {
                                 outline: 'none',
                                 fontFamily: 'inherit'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                            onFocus={(e) => e.target.style.borderColor = fieldErrors.password ? 'var(--danger)' : 'var(--primary)'}
                         />
+                        {fieldErrors.password && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{fieldErrors.password}</p>}
                     </div>
 
                     {/* SELECT / DROPDOWN — HTML5 Drop Down Menu */}

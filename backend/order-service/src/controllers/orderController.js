@@ -12,10 +12,14 @@ const { produceEvent, TOPICS } = require('../config/kafka');
 // CREATE — Place an order (ASYNCHRONOUS EVENT-DRIVEN)
 // ========================================================================
 const addOrderItems = async (req, res) => {
-    const { orderItems, totalPrice, paymentMethod } = req.body;
+    const { orderItems, totalPrice, paymentMethod, deliveryAddress } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
         return res.status(400).json({ message: 'No order items' });
+    }
+
+    if (!deliveryAddress || deliveryAddress.trim().length === 0) {
+        return res.status(400).json({ message: 'Delivery address is required' });
     }
 
     try {
@@ -25,6 +29,7 @@ const addOrderItems = async (req, res) => {
             orderItems,
             user: req.user._id,
             totalPrice,
+            deliveryAddress: deliveryAddress.trim(),
             paymentMethod: paymentMethod || 'cod',
             paymentStatus: 'pending', // Will be updated by Payment Consumer
             status: 'pending'         // Will be updated by Delivery Consumer

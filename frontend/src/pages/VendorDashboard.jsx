@@ -186,6 +186,7 @@ const VendorDashboard = () => {
     // ================= UI =================
 
     return (
+        <>
         <div className="container" style={{ padding: '2rem 1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
@@ -387,12 +388,14 @@ const VendorDashboard = () => {
                 </div>
             )}
 
+            </div> {/* END CONTAINER */}
+
             {/* ================= MODAL: ADD / EDIT PRODUCT ================= */}
             {showForm && (
                 <div style={{ 
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
                     background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 
                 }}>
                     <div className="glass-panel page-transition" style={{ 
                         width: '100%', maxWidth: '500px', padding: '2rem', 
@@ -488,7 +491,7 @@ const VendorDashboard = () => {
                     background-color: var(--surface);
                 }
             `}</style>
-        </div>
+        </>
     );
 };
 

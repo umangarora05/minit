@@ -20,6 +20,9 @@ const orderSchema = mongoose.Schema({
         }
     ],
 
+    // Delivery address — where the order should be delivered
+    deliveryAddress: { type: String, required: true },
+
     totalPrice: { type: Number, required: true, default: 0.0 },
 
     // Payment method — UPI, Debit Card, Credit Card, or Cash on Delivery

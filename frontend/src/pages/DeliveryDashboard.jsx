@@ -140,8 +140,10 @@ const DeliveryDashboard = () => {
                                 padding: '1.5rem',
                                 marginBottom: '1.5rem',
                                 borderTop: `4px solid ${
-                                    order.status === 'delivered' ? 'var(--success)' : 
-                                    order.status === 'out_for_delivery' ? 'var(--warning)' : 
+                                    order.status === 'cancelled' ? '#ef4444' :
+                                    order.status === 'pending' ? '#eab308' :
+                                    order.status === 'delivered' ? 'var(--success)' :
+                                    order.status === 'out_for_delivery' ? 'var(--warning)' :
                                     'var(--primary)'
                                 }`,
                                 transition: 'all 0.3s ease',
@@ -160,11 +162,15 @@ const DeliveryDashboard = () => {
                                     textTransform: 'uppercase',
                                     fontSize: '0.8rem',
                                     padding: '0.4rem 0.8rem',
-                                    background: order.status === 'delivered' ? 'rgba(50, 205, 50, 0.85)' : 
-                                                order.status === 'out_for_delivery' ? 'rgba(210, 153, 34, 0.1)' : 
+                                    background: order.status === 'cancelled' ? 'rgba(239, 68, 68, 0.15)' :
+                                                order.status === 'pending' ? 'rgba(234, 179, 8, 0.15)' :
+                                                order.status === 'delivered' ? 'rgba(50, 205, 50, 0.85)' :
+                                                order.status === 'out_for_delivery' ? 'rgba(210, 153, 34, 0.1)' :
                                                 'rgba(50, 205, 50, 0.1)',
-                                    color: order.status === 'delivered' ? 'var(--success)' :
-                                           order.status === 'out_for_delivery' ? 'var(--warning)' : 
+                                    color: order.status === 'cancelled' ? '#ef4444' :
+                                           order.status === 'pending' ? '#eab308' :
+                                           order.status === 'delivered' ? 'var(--success)' :
+                                           order.status === 'out_for_delivery' ? 'var(--warning)' :
                                            'var(--primary)',
                                     borderRadius: '20px',
                                     fontWeight: 'bold'
@@ -176,6 +182,26 @@ const DeliveryDashboard = () => {
                             <p style={{ margin: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
                                 <MapPin size={16} /> Customer: <strong>{order.user?.name || 'Unknown'}</strong>
                             </p>
+
+                            {/* Delivery Address */}
+                            {order.deliveryAddress && (
+                                <div style={{
+                                    margin: '0.75rem 0',
+                                    padding: '0.75rem 1rem',
+                                    background: 'rgba(200, 155, 60, 0.08)',
+                                    border: '1px solid rgba(200, 155, 60, 0.25)',
+                                    borderRadius: '8px',
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '0.5rem'
+                                }}>
+                                    <MapPin size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <div>
+                                        <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--primary)', fontWeight: 700 }}>Deliver To</span>
+                                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text)', lineHeight: '1.4' }}>{order.deliveryAddress}</p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div style={{
                                 margin: '1.5rem 0',

@@ -212,7 +212,7 @@ const StudentDashboard = () => {
                                     borderTop: '1px solid var(--border)', position: 'relative', overflow: 'hidden'
                                 }}>
                                     {product.image ? (
-                                        <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
+                                        <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '10px', background: '#fff' }} />
                                     ) : (
                                         <div className="flex-center" style={{ height: '100%', color: 'var(--text-muted)', fontSize: '2rem', background: `repeating-linear-gradient(45deg, #050505, #050505 10px, #0a0a0a 10px, #0a0a0a 20px)` }}>
                                             NO IMG

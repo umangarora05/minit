@@ -23,7 +23,7 @@ router.route('/vendor-sales').get(protect, restrictTo('vendor'), getVendorSales)
 // GET /api/orders/:id — view single order
 router.route('/:id').get(protect, getOrderById);
 
-// PUT /api/orders/:id/status — update order status (delivery/admin/vendor)
-router.route('/:id/status').put(protect, restrictTo('admin', 'vendor', 'delivery'), updateOrderStatus);
+// PUT /api/orders/:id/status — update order status (delivery/admin/vendor/student)
+router.route('/:id/status').put(protect, restrictTo('admin', 'vendor', 'delivery', 'student'), updateOrderStatus);
 
 module.exports = router;

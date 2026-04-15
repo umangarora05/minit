@@ -20,12 +20,35 @@ const Login = () => {
     const navigate = useNavigate();               // For programmatic navigation
     const [error, setError] = useState('');        // Error message state
     const [loading, setLoading] = useState(false); // Loading state
+    const [fieldErrors, setFieldErrors] = useState({ email: '' }); // Field-level errors
+
+    // ========================================================================
+    // REGEX PATTERNS — Email validation only (no password regex on login)
+    // ========================================================================
+    // Email regex: must be a valid email format (supports Gmail & other providers)
+    const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    // --- FIELD-LEVEL VALIDATION ---
+    const validateField = (field, value) => {
+        let errorMsg = '';
+        if (field === 'email') {
+            if (!value.trim()) errorMsg = 'Email is required';
+            else if (!EMAIL_REGEX.test(value)) errorMsg = 'Enter a valid email (e.g., name@gmail.com)';
+        }
+        setFieldErrors(prev => ({ ...prev, [field]: errorMsg }));
+        return errorMsg === '';
+    };
 
     // --- FORM SUBMISSION HANDLER (Event Handling) ---
     // async function — uses async/await for the login API call
     const handleSubmit = async (e) => {
         e.preventDefault();   // Prevent default form submission (page reload)
         setError('');         // Clear previous errors
+
+        // Validate email with regex before submitting
+        const isEmailValid = validateField('email', email);
+        if (!isEmailValid) return;
+
         setLoading(true);     // Show loading state
         try {
             await login(email, password);  // Ajax call (inside AuthContext)
@@ -94,12 +117,13 @@ const Login = () => {
                         <input
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="name@email.com"
+                            onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) validateField('email', e.target.value); }}
+                            onBlur={(e) => { e.target.style.borderColor = fieldErrors.email ? 'var(--danger)' : 'var(--border)'; validateField('email', email); }}
+                            placeholder="name@gmail.com"
                             required
                             style={{
                                 background: 'var(--input-bg)',
-                                border: '1px solid var(--border)',
+                                border: fieldErrors.email ? '1px solid var(--danger)' : '1px solid var(--border)',
                                 color: 'var(--text)',
                                 width: '100%',
                                 padding: '1rem',
@@ -108,9 +132,9 @@ const Login = () => {
                                 transition: 'border-color 0.2s',
                                 fontFamily: 'inherit'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                            onFocus={(e) => e.target.style.borderColor = fieldErrors.email ? 'var(--danger)' : 'var(--primary)'}
                         />
+                        {fieldErrors.email && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{fieldErrors.email}</p>}
                     </div>
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Password</label>
@@ -135,6 +159,9 @@ const Login = () => {
                             onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
                             onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
                         />
+                        <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                            <Link to="/forgot-password" style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: '600', textDecoration: 'none' }}>Forgot Password?</Link>
+                        </div>
                     </div>
                     {/* Submit button — disabled while loading (prevents double submit) */}
                     <button

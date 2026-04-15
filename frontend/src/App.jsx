@@ -20,6 +20,7 @@ import AdminDashboardPage from './pages/AdminDashboard';
 import Cart from './pages/Cart';
 import Payment from './pages/Payment';
 import MyOrders from './pages/MyOrders';
+import ForgotPassword from './pages/ForgotPassword';
 import { useContext, useEffect } from 'react';
 import AuthContext from './context/AuthContext';
 
@@ -65,7 +66,7 @@ function AppContent() {
   const location = useLocation(); // React Router hook — gives current URL path
 
   // Decide whether to show navbar (hide on landing/login/register pages)
-  const hideNavbarPaths = ['/', '/login', '/register'];
+  const hideNavbarPaths = ['/', '/login', '/register', '/forgot-password'];
   const shouldShowNavbar = !hideNavbarPaths.includes(location.pathname);
 
   // --- useEffect HOOK ---
@@ -91,6 +92,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
 
         {/* Protected Routes — wrapped in PrivateRoute for authorization */}

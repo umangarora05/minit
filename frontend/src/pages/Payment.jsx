@@ -9,7 +9,7 @@ import { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
-import { CreditCard, Smartphone, Banknote, Truck, Lock, CheckCircle, Loader } from 'lucide-react';
+import { CreditCard, Smartphone, Banknote, Truck, Lock, CheckCircle, Loader, MapPin } from 'lucide-react';
 
 const Payment = () => {
     const { user } = useContext(AuthContext);
@@ -26,6 +26,79 @@ const Payment = () => {
     const [formData, setFormData] = useState({                    // Payment form fields
         upiId: '', cardNumber: '', expiry: '', cvv: '', cardName: ''
     });
+    const [formErrors, setFormErrors] = useState({});             // Validation error messages
+    const [deliveryAddress, setDeliveryAddress] = useState('');   // Delivery address
+    const [addressError, setAddressError] = useState('');         // Address validation error
+
+    // ========================================================================
+    // REGEX PATTERNS — for validating payment form fields
+    // ========================================================================
+    const REGEX = {
+        // UPI ID: must be in format username@bankname (e.g., user@paytm, name@oksbi)
+        upi: /^[a-zA-Z0-9.\-_]{2,49}@[a-zA-Z]{2,}$/,
+        // Card Number: 13-19 digits, optionally separated by spaces (Visa, Mastercard, Rupay)
+        cardNumber: /^[0-9]{4}\s?[0-9]{4}\s?[0-9]{4}\s?[0-9]{1,7}$/,
+        // Expiry: MM/YY format where MM is 01-12
+        expiry: /^(0[1-9]|1[0-2])\/([0-9]{2})$/,
+        // CVV: 3 or 4 digits
+        cvv: /^[0-9]{3,4}$/,
+        // Cardholder Name: letters and spaces only, min 2 chars
+        cardName: /^[a-zA-Z\s]{2,50}$/
+    };
+
+    // --- VALIDATION FUNCTION ---
+    const validatePaymentForm = () => {
+        const errors = {};
+
+        if (selectedMethod === 'upi') {
+            if (!formData.upiId.trim()) {
+                errors.upiId = 'UPI ID is required';
+            } else if (!REGEX.upi.test(formData.upiId.trim())) {
+                errors.upiId = 'Invalid UPI ID. Use format: username@bankname (e.g., name@paytm)';
+            }
+        }
+
+        if (selectedMethod === 'debit' || selectedMethod === 'credit') {
+            // Cardholder Name
+            if (!formData.cardName.trim()) {
+                errors.cardName = 'Cardholder name is required';
+            } else if (!REGEX.cardName.test(formData.cardName.trim())) {
+                errors.cardName = 'Name must contain only letters and spaces (2-50 chars)';
+            }
+
+            // Card Number
+            const cleanCardNumber = formData.cardNumber.replace(/\s/g, '');
+            if (!cleanCardNumber) {
+                errors.cardNumber = 'Card number is required';
+            } else if (!REGEX.cardNumber.test(formData.cardNumber)) {
+                errors.cardNumber = 'Invalid card number. Enter 13-19 digits (e.g., 4111 1111 1111 1111)';
+            }
+
+            // Expiry
+            if (!formData.expiry.trim()) {
+                errors.expiry = 'Expiry date is required';
+            } else if (!REGEX.expiry.test(formData.expiry.trim())) {
+                errors.expiry = 'Invalid expiry. Use MM/YY format (e.g., 03/27)';
+            } else {
+                // Check if card is not expired
+                const [month, year] = formData.expiry.split('/');
+                const expiryDate = new Date(2000 + parseInt(year), parseInt(month));
+                if (expiryDate < new Date()) {
+                    errors.expiry = 'Card has expired';
+                }
+            }
+
+            // CVV
+            if (!formData.cvv.trim()) {
+                errors.cvv = 'CVV is required';
+            } else if (!REGEX.cvv.test(formData.cvv.trim())) {
+                errors.cvv = 'CVV must be 3 or 4 digits';
+            }
+        }
+
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
 
     // Redirect if no cart data
     useEffect(() => {
@@ -43,6 +116,17 @@ const Payment = () => {
     // --- PROCESS PAYMENT (dummy) ---
     const handlePayment = async () => {
         if (!selectedMethod) return;
+
+        // Validate delivery address
+        if (!deliveryAddress.trim()) {
+            setAddressError('Please enter a delivery address');
+            return;
+        }
+        setAddressError('');
+
+        // Validate form fields using regex before processing
+        if (selectedMethod !== 'cod' && !validatePaymentForm()) return;
+
         setProcessing(true);
 
         // Simulate payment processing delay (2 seconds)
@@ -50,11 +134,12 @@ const Payment = () => {
 
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            // POST order with payment method
+            // POST order with payment method and delivery address
             await axios.post(`${import.meta.env.VITE_API_URL}/orders`, {
                 orderItems: cartItems,
                 totalPrice,
-                paymentMethod: selectedMethod
+                paymentMethod: selectedMethod,
+                deliveryAddress: deliveryAddress.trim()
             }, config);
 
             setProcessing(false);
@@ -141,6 +226,36 @@ const Payment = () => {
                     {' '}• {cartItems?.length} item(s)
                 </p>
 
+                {/* ===== DELIVERY ADDRESS ===== */}
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+                    <h3 style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <MapPin size={16} /> Delivery Address <span style={{ color: 'var(--danger)', fontSize: '1rem' }}>*</span>
+                    </h3>
+                    <textarea
+                        value={deliveryAddress}
+                        onChange={(e) => { setDeliveryAddress(e.target.value); setAddressError(''); }}
+                        placeholder="Enter your full delivery address (e.g., Room 204, Hostel B, VIT Campus, Vellore)"
+                        rows={3}
+                        required
+                        style={{
+                            background: 'var(--input-bg)',
+                            border: addressError ? '1px solid var(--danger)' : '1px solid var(--border)',
+                            color: 'var(--text)',
+                            width: '100%',
+                            padding: '1rem',
+                            borderRadius: '8px',
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            fontSize: '0.9rem',
+                            resize: 'vertical',
+                            transition: 'border-color 0.2s'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = addressError ? 'var(--danger)' : 'var(--border)'}
+                    />
+                    {addressError && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{addressError}</p>}
+                </div>
+
                 {/* ===== PAYMENT METHOD SELECTION ===== */}
                 <div style={{ marginBottom: '2rem' }}>
                     <h3 style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: '1rem' }}>
@@ -187,43 +302,62 @@ const Payment = () => {
                         </h3>
 
                         {selectedMethod === 'upi' ? (
-                            <input
-                                type="text"
-                                placeholder="yourname@upi"
-                                value={formData.upiId}
-                                onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
-                                style={{
-                                    width: '100%', padding: '1rem',
-                                    background: 'var(--input-bg)', border: '1px solid var(--border)',
-                                    color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit',
-                                    fontSize: '1rem', outline: 'none'
-                                }}
-                                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
-                            />
+                            <div>
+                                <input
+                                    type="text"
+                                    placeholder="yourname@upi (e.g., name@paytm)"
+                                    value={formData.upiId}
+                                    onChange={(e) => { setFormData({ ...formData, upiId: e.target.value }); setFormErrors({ ...formErrors, upiId: '' }); }}
+                                    style={{
+                                        width: '100%', padding: '1rem',
+                                        background: 'var(--input-bg)',
+                                        border: formErrors.upiId ? '1px solid var(--danger)' : '1px solid var(--border)',
+                                        color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit',
+                                        fontSize: '1rem', outline: 'none'
+                                    }}
+                                    onFocus={(e) => e.target.style.borderColor = formErrors.upiId ? 'var(--danger)' : 'var(--primary)'}
+                                    onBlur={(e) => e.target.style.borderColor = formErrors.upiId ? 'var(--danger)' : 'var(--border)'}
+                                />
+                                {formErrors.upiId && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{formErrors.upiId}</p>}
+                            </div>
                         ) : (
                             <div style={{ display: 'grid', gap: '1rem' }}>
-                                <input placeholder="Cardholder Name" value={formData.cardName}
-                                    onChange={(e) => setFormData({ ...formData, cardName: e.target.value })}
-                                    style={{ padding: '0.9rem', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
-                                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                    onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
-                                <input placeholder="Card Number (e.g. 4111 1111 1111 1111)" value={formData.cardNumber}
-                                    onChange={(e) => setFormData({ ...formData, cardNumber: e.target.value })}
-                                    style={{ padding: '0.9rem', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
-                                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                    onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+                                <div>
+                                    <input placeholder="Cardholder Name" value={formData.cardName}
+                                        onChange={(e) => { setFormData({ ...formData, cardName: e.target.value }); setFormErrors({ ...formErrors, cardName: '' }); }}
+                                        style={{ padding: '0.9rem', background: 'var(--input-bg)', border: formErrors.cardName ? '1px solid var(--danger)' : '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
+                                        onFocus={(e) => e.target.style.borderColor = formErrors.cardName ? 'var(--danger)' : 'var(--primary)'}
+                                        onBlur={(e) => e.target.style.borderColor = formErrors.cardName ? 'var(--danger)' : 'var(--border)'} />
+                                    {formErrors.cardName && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{formErrors.cardName}</p>}
+                                </div>
+                                <div>
+                                    <input placeholder="Card Number (e.g. 4111 1111 1111 1111)" value={formData.cardNumber}
+                                        onChange={(e) => { setFormData({ ...formData, cardNumber: e.target.value }); setFormErrors({ ...formErrors, cardNumber: '' }); }}
+                                        maxLength={19}
+                                        style={{ padding: '0.9rem', background: 'var(--input-bg)', border: formErrors.cardNumber ? '1px solid var(--danger)' : '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
+                                        onFocus={(e) => e.target.style.borderColor = formErrors.cardNumber ? 'var(--danger)' : 'var(--primary)'}
+                                        onBlur={(e) => e.target.style.borderColor = formErrors.cardNumber ? 'var(--danger)' : 'var(--border)'} />
+                                    {formErrors.cardNumber && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{formErrors.cardNumber}</p>}
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <input placeholder="MM/YY" value={formData.expiry}
-                                        onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
-                                        style={{ padding: '0.9rem', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
-                                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                        onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
-                                    <input placeholder="CVV" type="password" value={formData.cvv}
-                                        onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
-                                        style={{ padding: '0.9rem', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
-                                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                        onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+                                    <div>
+                                        <input placeholder="MM/YY" value={formData.expiry}
+                                            onChange={(e) => { setFormData({ ...formData, expiry: e.target.value }); setFormErrors({ ...formErrors, expiry: '' }); }}
+                                            maxLength={5}
+                                            style={{ padding: '0.9rem', background: 'var(--input-bg)', border: formErrors.expiry ? '1px solid var(--danger)' : '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
+                                            onFocus={(e) => e.target.style.borderColor = formErrors.expiry ? 'var(--danger)' : 'var(--primary)'}
+                                            onBlur={(e) => e.target.style.borderColor = formErrors.expiry ? 'var(--danger)' : 'var(--border)'} />
+                                        {formErrors.expiry && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{formErrors.expiry}</p>}
+                                    </div>
+                                    <div>
+                                        <input placeholder="CVV" type="password" value={formData.cvv}
+                                            onChange={(e) => { setFormData({ ...formData, cvv: e.target.value }); setFormErrors({ ...formErrors, cvv: '' }); }}
+                                            maxLength={4}
+                                            style={{ padding: '0.9rem', background: 'var(--input-bg)', border: formErrors.cvv ? '1px solid var(--danger)' : '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px', fontFamily: 'inherit', outline: 'none', width: '100%' }}
+                                            onFocus={(e) => e.target.style.borderColor = formErrors.cvv ? 'var(--danger)' : 'var(--primary)'}
+                                            onBlur={(e) => e.target.style.borderColor = formErrors.cvv ? 'var(--danger)' : 'var(--border)'} />
+                                        {formErrors.cvv && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{formErrors.cvv}</p>}
+                                    </div>
                                 </div>
                             </div>
                         )}

@@ -5,7 +5,7 @@
 // ========================================================================
 
 const express = require('express');
-const { registerUser, loginUser } = require('../controllers/authController');
+const { registerUser, loginUser, resetPassword } = require('../controllers/authController');
 
 const router = express.Router(); // create a mini-router
 
@@ -14,5 +14,8 @@ router.post('/register', registerUser);
 
 // POST /api/auth/login — handles login form submission
 router.post('/login', loginUser);
+
+// PUT /api/auth/reset-password — handles direct password reset
+router.put('/reset-password', resetPassword);
 
 module.exports = router; // export to be mounted in server.js
