@@ -1,0 +1,791 @@
+[
+  {
+    "_id": "col_minit_001",
+    "colName": "MINIT API",
+    "created": "2026-04-06",
+    "sortNum": 1,
+    "folders": [
+      {
+        "_id": "fld_auth_001",
+        "name": "🔐 Auth Service",
+        "containerId": "col_minit_001",
+        "sortNum": 1
+      },
+      {
+        "_id": "fld_products_001",
+        "name": "📦 Inventory Service",
+        "containerId": "col_minit_001",
+        "sortNum": 2
+      },
+      {
+        "_id": "fld_orders_001",
+        "name": "🛒 Order Service",
+        "containerId": "col_minit_001",
+        "sortNum": 3
+      },
+      {
+        "_id": "fld_delivery_001",
+        "name": "🚚 Delivery Service",
+        "containerId": "col_minit_001",
+        "sortNum": 4
+      },
+      {
+        "_id": "fld_admin_001",
+        "name": "🛡️ Admin Service",
+        "containerId": "col_minit_001",
+        "sortNum": 5
+      },
+      {
+        "_id": "fld_health_001",
+        "name": "💚 Health Checks",
+        "containerId": "col_minit_001",
+        "sortNum": 6
+      }
+    ],
+    "requests": [
+
+      {
+        "_id": "req_auth_register_student",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Register Student",
+        "url": "{{BASE_URL}}/api/auth/register",
+        "method": "POST",
+        "sortNum": 10,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Test Student\",\n  \"email\": \"student@test.com\",\n  \"password\": \"password123\",\n  \"role\": \"student\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "STUDENT_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_register_vendor",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Register Vendor",
+        "url": "{{BASE_URL}}/api/auth/register",
+        "method": "POST",
+        "sortNum": 20,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Test Vendor\",\n  \"email\": \"vendor@test.com\",\n  \"password\": \"password123\",\n  \"role\": \"vendor\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "VENDOR_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_register_delivery",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Register Delivery Agent",
+        "url": "{{BASE_URL}}/api/auth/register",
+        "method": "POST",
+        "sortNum": 30,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Test Driver\",\n  \"email\": \"driver@test.com\",\n  \"password\": \"password123\",\n  \"role\": \"delivery\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "DELIVERY_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_register_admin",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Register Admin",
+        "url": "{{BASE_URL}}/api/auth/register",
+        "method": "POST",
+        "sortNum": 40,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Test Admin\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"password123\",\n  \"role\": \"admin\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "ADMIN_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_login_student",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Login Student",
+        "url": "{{BASE_URL}}/api/auth/login",
+        "method": "POST",
+        "sortNum": 50,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"email\": \"student@test.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "STUDENT_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_login_vendor",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Login Vendor",
+        "url": "{{BASE_URL}}/api/auth/login",
+        "method": "POST",
+        "sortNum": 60,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"email\": \"vendor@test.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "VENDOR_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_login_delivery",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Login Delivery Agent",
+        "url": "{{BASE_URL}}/api/auth/login",
+        "method": "POST",
+        "sortNum": 70,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"email\": \"driver@test.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "DELIVERY_TOKEN"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_auth_login_admin",
+        "colId": "col_minit_001",
+        "containerId": "fld_auth_001",
+        "name": "Login Admin",
+        "url": "{{BASE_URL}}/api/auth/login",
+        "method": "POST",
+        "sortNum": 80,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json.token",
+            "action": "spiegal",
+            "value": "ADMIN_TOKEN"
+          }
+        ]
+      },
+
+
+
+      {
+        "_id": "req_products_getall",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Get All Products (Public)",
+        "url": "{{BASE_URL}}/api/products",
+        "method": "GET",
+        "sortNum": 10,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_products_create",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Create Product (Vendor)",
+        "url": "{{BASE_URL}}/api/products",
+        "method": "POST",
+        "sortNum": 20,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Authorization", "value": "Bearer {{VENDOR_TOKEN}}" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Masala Maggi\",\n  \"price\": 30,\n  \"description\": \"Classic 2-minute noodles with masala flavour\",\n  \"image\": \"https://via.placeholder.com/300x300.png?text=Maggi\",\n  \"category\": \"Snacks\",\n  \"stock\": 100\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json._id",
+            "action": "spiegal",
+            "value": "PRODUCT_ID"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_products_getbyid",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Get Product by ID",
+        "url": "{{BASE_URL}}/api/products/{{PRODUCT_ID}}",
+        "method": "GET",
+        "sortNum": 30,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_products_update",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Update Product (Vendor)",
+        "url": "{{BASE_URL}}/api/products/{{PRODUCT_ID}}",
+        "method": "PUT",
+        "sortNum": 40,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Authorization", "value": "Bearer {{VENDOR_TOKEN}}" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"name\": \"Masala Maggi (Updated)\",\n  \"price\": 35,\n  \"stock\": 80\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_products_stock",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Get Product Stock (Redis-cached)",
+        "url": "{{BASE_URL}}/api/products/{{PRODUCT_ID}}/stock",
+        "method": "GET",
+        "sortNum": 50,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_products_delete",
+        "colId": "col_minit_001",
+        "containerId": "fld_products_001",
+        "name": "Delete Product (Vendor)",
+        "url": "{{BASE_URL}}/api/products/{{PRODUCT_ID}}",
+        "method": "DELETE",
+        "sortNum": 60,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{VENDOR_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+
+
+      {
+        "_id": "req_orders_place",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Place Order (Student)",
+        "url": "{{BASE_URL}}/api/orders",
+        "method": "POST",
+        "sortNum": 10,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Authorization", "value": "Bearer {{STUDENT_TOKEN}}" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"orderItems\": [\n    {\n      \"name\": \"Masala Maggi\",\n      \"qty\": 2,\n      \"price\": 30,\n      \"product\": \"{{PRODUCT_ID}}\"\n    }\n  ],\n  \"totalPrice\": 60,\n  \"paymentMethod\": \"cod\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "201"
+          },
+          {
+            "type": "set-env-var",
+            "custom": "json._id",
+            "action": "spiegal",
+            "value": "ORDER_ID"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_orders_myorders",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Get My Orders (Student)",
+        "url": "{{BASE_URL}}/api/orders/myorders",
+        "method": "GET",
+        "sortNum": 20,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{STUDENT_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_orders_getall",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Get All Orders (Admin)",
+        "url": "{{BASE_URL}}/api/orders",
+        "method": "GET",
+        "sortNum": 30,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_orders_getbyid",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Get Order by ID",
+        "url": "{{BASE_URL}}/api/orders/{{ORDER_ID}}",
+        "method": "GET",
+        "sortNum": 40,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{STUDENT_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_orders_update_status",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Update Order Status (Admin)",
+        "url": "{{BASE_URL}}/api/orders/{{ORDER_ID}}/status",
+        "method": "PUT",
+        "sortNum": 50,
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }
+        ],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"status\": \"confirmed\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_orders_vendor_sales",
+        "colId": "col_minit_001",
+        "containerId": "fld_orders_001",
+        "name": "Get Vendor Sales Stats",
+        "url": "{{BASE_URL}}/api/orders/vendor-sales",
+        "method": "GET",
+        "sortNum": 60,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{VENDOR_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+
+
+      {
+        "_id": "req_delivery_accept",
+        "colId": "col_minit_001",
+        "containerId": "fld_delivery_001",
+        "name": "Accept Delivery",
+        "url": "{{BASE_URL}}/api/delivery/{{ORDER_ID}}/accept",
+        "method": "POST",
+        "sortNum": 10,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{DELIVERY_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_delivery_start",
+        "colId": "col_minit_001",
+        "containerId": "fld_delivery_001",
+        "name": "Start Delivery",
+        "url": "{{BASE_URL}}/api/delivery/{{ORDER_ID}}/start",
+        "method": "POST",
+        "sortNum": 20,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{DELIVERY_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_delivery_complete",
+        "colId": "col_minit_001",
+        "containerId": "fld_delivery_001",
+        "name": "Mark Delivered",
+        "url": "{{BASE_URL}}/api/delivery/{{ORDER_ID}}/deliver",
+        "method": "POST",
+        "sortNum": 30,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{DELIVERY_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+
+
+      {
+        "_id": "req_admin_stats",
+        "colId": "col_minit_001",
+        "containerId": "fld_admin_001",
+        "name": "Get Admin Dashboard Stats",
+        "url": "{{BASE_URL}}/api/admin/stats",
+        "method": "GET",
+        "sortNum": 10,
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{ADMIN_TOKEN}}" }
+        ],
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+
+
+      {
+        "_id": "req_health_gateway",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Gateway Health",
+        "url": "{{BASE_URL}}/",
+        "method": "GET",
+        "sortNum": 10,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_auth",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Auth Service Health",
+        "url": "http://localhost:5001/",
+        "method": "GET",
+        "sortNum": 20,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_order",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Order Service Health",
+        "url": "http://localhost:5002/",
+        "method": "GET",
+        "sortNum": 30,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_inventory",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Inventory Service Health",
+        "url": "http://localhost:5003/",
+        "method": "GET",
+        "sortNum": 40,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_delivery",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Delivery Service Health",
+        "url": "http://localhost:5004/",
+        "method": "GET",
+        "sortNum": 50,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_payment",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Payment Service Health",
+        "url": "http://localhost:5005/",
+        "method": "GET",
+        "sortNum": 60,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+
+      {
+        "_id": "req_health_admin",
+        "colId": "col_minit_001",
+        "containerId": "fld_health_001",
+        "name": "Admin Service Health",
+        "url": "http://localhost:5006/",
+        "method": "GET",
+        "sortNum": 70,
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      }
+    ]
+  }
+]

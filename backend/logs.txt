@@ -1,0 +1,10 @@
+﻿Γ£à Order Service Kafka Producer Ready
+Γùç injecting env (0) from .env // tip: Γîÿ multiple files { path: ['.env.local', '.env'] }
+≡ƒ¢Æ Order Service on port 5002
+Γ£à Redis connected
+Γ£à Kafka producer connected
+Γ£à Order Service Kafka Producer Ready
+[Consumer] order-state-group ΓåÆ listening on topic: order_status_update
+{"level":"INFO","timestamp":"2026-04-05T10:01:53.413Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"order-state-group"}
+MongoDB Connected: ac-xddmsja-shard-00-01.i3nljza.mongodb.net
+{"level":"INFO","timestamp":"2026-04-05T10:01:56.684Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"order-state-group","memberId":"minit-backend-587fb6c4-9227-4cf7-86e5-7d979ec9f8de","leaderId":"minit-backend-587fb6c4-9227-4cf7-86e5-7d979ec9f8de","isLeader":true,"memberAssignment":{"order_status_update":[0]},"groupProtocol":"RoundRobinAssigner","duration":3269}

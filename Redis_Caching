@@ -1,0 +1,75 @@
+# Caching Strategy: Redis Integration
+
+This document outlines the implementation and benefits of using **Redis** as a distributed cache in the **MINIT** architecture. Caching is strategically applied to high-read and high-frequency data to improve performance and reduce database load.
+
+---
+
+## 1. Caching Patterns
+
+The application primarily employs two caching patterns: **Cache-Aside** and **Write-Through (Proactive Invalidation)**.
+
+### A. Cache-Aside (Lazy Loading)
+Used for data that is read frequently but updated less often, such as the full product list.
+1.  **Check Cache**: The controller first checks Redis for a specific key (e.g., `products:all`).
+2.  **Cache Hit**: If data exists, it is returned immediately.
+3.  **Cache Miss**: If data is missing, it is fetched from MongoDB, stored in Redis with a Time-To-Live (TTL), and then returned to the user.
+
+### B. Proactive Invalidation (Write-Through)
+Used for critical, fast-changing data like **Product Stock**.
+1.  **Atomic Update**: When an order is processed, the `inventoryConsumer` updates the stock in MongoDB using an atomic operation.
+2.  **Immediate Refresh**: Immediately after the DB update, the consumer refreshes the Redis key (`stock:<id>`) with the new value.
+3.  **Consistency**: This ensures that subsequent stock checks (which are "Redis-first") see the most accurate data without waiting for a TTL to expire.
+
+---
+
+## 2. Service-Level Dissection
+
+### **Product Service (`productController.js`)**
+- **Endpoint: `GET /api/products`**
+    - **Key**: `products:all`
+    - **Logic**: Cache-Aside. Reduces expensive `Product.find({})` calls.
+    - **TTL**: 30 seconds (short enough to stay fresh, long enough to handle spikes).
+- **Endpoint: `GET /api/products/:id/stock`**
+    - **Key**: `stock:<id>`
+    - **Logic**: Redis-first. Returns the cached stock level immediately.
+- **Mutation Hooks (`createProduct`, `updateProduct`, `deleteProduct`)**
+    - **Action**: Invalidation. Whenever a product is changed, `delCache('products:all')` is called to ensure the next visitor gets a fresh list.
+
+### **Inventory Service (`inventoryConsumer.js`)**
+- **Context**: Processing Kafka `order_created` events.
+- **Action**: Proactive Cache Update.
+- **Logic**: After successfully decrementing stock in MongoDB, it calls `setCache(\`stock:${id}\`, newStock, 300)`. If Redis is temporarily unavailable, it falls back to `delCache` to ensure no stale data remains.
+
+---
+
+## 3. Redis Configuration (`config/redis.js`)
+
+The implementation uses the modern `redis` (v4+) Node.js client with several safety features:
+- **Graceful Failure**: If Redis is down, the system doesn't crash. It logs an error and allows the request to proceed directly to MongoDB (performance degrades, but functionality remains).
+- **TTL Enforcement**: Every `setCache` call includes a TTL to prevent memory leaks and ensure eventual consistency.
+- **Readiness Check**: `isReady()` helper prevents operation attempts on a disconnected client.
+
+---
+
+## 4. Key Management Strategy
+
+| Key Pattern | Description | Strategy | TTL | Source |
+| :--- | :--- | :--- | :--- | :--- |
+| `products:all` | Full product catalog | Cache-Aside | 30s | `getProducts` |
+| `stock:<id>` | Current stock of a product | Proactive Update | 60s - 300s | `inventoryConsumer` |
+
+---
+
+## 5. How it makes the Application Better
+
+### **Faster Response Times**
+Reading from RAM (Redis) is orders of magnitude faster than reading from Disk (MongoDB). For popular endpoints like the product list, users see near-instant load times.
+
+### **Database Offloading**
+By serving the most frequent queries from Redis, we dramatically reduce the CPU and I/O pressure on MongoDB. This allows the database to focus on complex writes and transactional integrity rather than repetitive reads.
+
+### **Flash Sale Preparedness**
+During high-traffic events, the `stock:<id>` check is the most hit endpoint. By serving this from Redis, the system can handle thousands of concurrent stock checks per second that would otherwise overwhelm a typical MongoDB instance.
+
+### **Reliability via Decoupling**
+The cache acts as a "buffer". Even if MongoDB experiences a momentary spike in latency, the cached product data remains available to users, providing a smoother experience.

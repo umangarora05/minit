@@ -1,0 +1,41 @@
+[
+  {
+    "_id": "env_minit_001",
+    "name": "MINIT Local",
+    "default": true,
+    "data": [
+      {
+        "name": "BASE_URL",
+        "value": "http://localhost:5000"
+      },
+      {
+        "name": "AUTH_TOKEN",
+        "value": ""
+      },
+      {
+        "name": "ADMIN_TOKEN",
+        "value": ""
+      },
+      {
+        "name": "VENDOR_TOKEN",
+        "value": ""
+      },
+      {
+        "name": "DELIVERY_TOKEN",
+        "value": ""
+      },
+      {
+        "name": "STUDENT_TOKEN",
+        "value": ""
+      },
+      {
+        "name": "PRODUCT_ID",
+        "value": ""
+      },
+      {
+        "name": "ORDER_ID",
+        "value": ""
+      }
+    ]
+  }
+]

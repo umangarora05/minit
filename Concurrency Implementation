@@ -1,0 +1,916 @@
+# Walkthrough — Concurrency-Safe Kafka Consumers
+
+## Summary
+
+Refactored all 4 Kafka consumers and supporting infrastructure to eliminate race conditions in a distributed Node.js + MongoDB + Kafka architecture. **7 files** were modified or created.
+
+---
+
+## Files Changed
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ProcessedEvent.js](file:///d:/Projects/min/backend/models/ProcessedEvent.js) | **NEW** | Persistent idempotency collection |
+| [Order.js](file:///d:/Projects/min/backend/models/Order.js) | MODIFY | Added `version` + `processedEvents` fields |
+| [kafka.js](file:///d:/Projects/min/backend/config/kafka.js) | MODIFY | `orderId` as partition key |
+| [orderConsumer.js](file:///d:/Projects/min/backend/kafka/consumers/orderConsumer.js) | REWRITE | Optimistic locking + state machine + DB idempotency |
+| [inventoryConsumer.js](file:///d:/Projects/min/backend/kafka/consumers/inventoryConsumer.js) | REWRITE | Persistent idempotency via `ProcessedEvent` |
+| [paymentConsumer.js](file:///d:/Projects/min/backend/kafka/consumers/paymentConsumer.js) | REWRITE | Persistent idempotency via `ProcessedEvent` |
+| [deliveryConsumer.js](file:///d:/Projects/min/backend/kafka/consumers/deliveryConsumer.js) | REWRITE | Persistent idempotency via `ProcessedEvent` |
+
+---
+
+## How Race Conditions Are Prevented
+
+### 1. Kafka Partitioning (First Line of Defense)
+
+```mermaid
+graph LR
+    P["Producer<br/>key = orderId"] --> PA["Partition 0<br/>order-abc events"]
+    P --> PB["Partition 1<br/>order-xyz events"]
+    PA --> C1["Consumer Instance 1"]
+    PB --> C2["Consumer Instance 2"]
+```
+
+All events for the **same orderId** are routed to the **same partition** because `orderId` is now used as the Kafka message key. Within a partition, Kafka guarantees **ordered, sequential delivery** to a single consumer instance — this alone eliminates most concurrent writes.
+
+```diff:kafka.js
+// ========================================================================
+// Kafka Config — Multi-topic, Retry, Dead Letter Queue
+// ========================================================================
+// Uses KafkaJS. Consumers support:
+//   - Idempotent event envelopes (eventId + timestamp on every message)
+//   - Per-consumer retry (maxRetries, default 3)
+//   - Dead Letter Queue routing after exhausted retries
+// The EventEmitter fallback has been intentionally removed — if Kafka is
+// unavailable, consumers log a clear error rather than silently using an
+// in-process emitter that cannot scale across multiple processes.
+// ========================================================================
+
+const { Kafka } = require('kafkajs');
+const { randomUUID } = require('crypto');
+
+// ── Kafka client (created once on connect) ──────────────────────────────
+let kafka = null;
+let producer = null;
+
+// ── Topic constants ─────────────────────────────────────────────────────
+const TOPICS = {
+    ORDER_CREATED:        'order_created',
+    INVENTORY_CHECKED:    'inventory_checked',
+    INVENTORY_FAILED:     'inventory_failed',
+    PAYMENT_COMPLETED:    'payment_completed',
+    PAYMENT_FAILED:       'payment_failed',
+    ORDER_STATUS_UPDATE:  'order_status_update',
+    DELIVERY_ASSIGNED:    'delivery_assigned',
+    DLQ:                  'dlq',
+};
+
+// ── Initialize Kafka producer ────────────────────────────────────────────
+const connectKafka = async () => {
+    kafka = new Kafka({
+        clientId: 'minit-backend',
+        brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
+        retry: { initialRetryTime: 300, retries: 5 },
+    });
+
+    producer = kafka.producer();
+    try {
+        await producer.connect();
+        console.log('  Kafka producer connected');
+    } catch (err) {
+        console.error('  Kafka producer failed to connect:', err.message);
+        // Producer failing is non-fatal at startup — it will error per-call
+    }
+};
+
+// ── Produce a single event ───────────────────────────────────────────────
+// Wraps payload in a standard envelope: { eventId, topic, timestamp, ...payload }
+// eventId is a UUID used by consumers for idempotency checks.
+const produceEvent = async (topic, payload) => {
+    if (!producer) throw new Error('Kafka producer not initialised. Call connectKafka() first.');
+
+    const envelope = {
+        eventId: randomUUID(),
+        topic,
+        timestamp: new Date().toISOString(),
+        ...payload,
+    };
+
+    await producer.send({
+        topic,
+        messages: [{ value: JSON.stringify(envelope) }],
+    });
+
+    console.log(`[Producer] → ${topic} | eventId: ${envelope.eventId}`);
+    return envelope.eventId;
+};
+
+// ── Consume a topic with retry + DLQ ────────────────────────────────────
+// handler: async ({ message, parsedValue }) => void
+// options.maxRetries: number of attempts before routing to DLQ (default 3)
+const consumeEvent = async (topic, groupId, handler, options = {}) => {
+    if (!kafka) throw new Error('Kafka not initialised. Call connectKafka() first.');
+
+    const { maxRetries = 3 } = options;
+    const consumer = kafka.consumer({ groupId });
+
+    try {
+        await consumer.connect();
+        await consumer.subscribe({ topic, fromBeginning: true });
+
+        console.log(`[Consumer] ${groupId} → listening on topic: ${topic}`);
+
+        await consumer.run({
+            eachMessage: async ({ topic: t, partition, message }) => {
+                let parsed;
+                try {
+                    parsed = JSON.parse(message.value.toString());
+                } catch {
+                    console.error(`[Consumer ${groupId}] Failed to parse message — routing to DLQ`);
+                    await _sendToDLQ(topic, message.value.toString(), 'JSON parse error');
+                    return;
+                }
+
+                // Retry loop
+                let attempt = 0;
+                while (attempt < maxRetries) {
+                    try {
+                        await handler({ message, parsedValue: parsed });
+                        return; // success — stop retry loop
+                    } catch (err) {
+                        attempt++;
+                        console.error(
+                            `[Consumer ${groupId}] Error on attempt ${attempt}/${maxRetries}: ${err.message}`
+                        );
+                        if (attempt < maxRetries) {
+                            // Exponential backoff: 500ms, 1s, 2s, …
+                            await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+                        }
+                    }
+                }
+
+                // Exhausted retries — send to DLQ
+                console.error(`[Consumer ${groupId}] Exhausted retries for eventId: ${parsed.eventId}. Sending to DLQ.`);
+                await _sendToDLQ(topic, JSON.stringify(parsed), `Failed after ${maxRetries} attempts`);
+            },
+        });
+    } catch (err) {
+        console.error(`[Consumer ${groupId}] Failed to connect to Kafka: ${err.message}`);
+        // Do NOT fall back to an EventEmitter — surface the failure clearly.
+    }
+};
+
+// ── Internal: route a failed message to the dead-letter queue ───────────
+const _sendToDLQ = async (originalTopic, rawValue, reason) => {
+    if (!producer) return;
+    try {
+        await producer.send({
+            topic: TOPICS.DLQ,
+            messages: [{
+                value: JSON.stringify({
+                    originalTopic,
+                    reason,
+                    failedAt: new Date().toISOString(),
+                    payload: rawValue,
+                }),
+            }],
+        });
+        console.log(`[DLQ] Message from topic "${originalTopic}" routed to DLQ. Reason: ${reason}`);
+    } catch (err) {
+        console.error('[DLQ] Could not route to DLQ:', err.message);
+    }
+};
+
+module.exports = { connectKafka, produceEvent, consumeEvent, TOPICS };
+===
+// ========================================================================
+// Kafka Config — Multi-topic, Retry, Dead Letter Queue
+// ========================================================================
+// Uses KafkaJS. Consumers support:
+//   - Idempotent event envelopes (eventId + timestamp on every message)
+//   - Per-consumer retry (maxRetries, default 3)
+//   - Dead Letter Queue routing after exhausted retries
+// The EventEmitter fallback has been intentionally removed — if Kafka is
+// unavailable, consumers log a clear error rather than silently using an
+// in-process emitter that cannot scale across multiple processes.
+// ========================================================================
+
+const { Kafka } = require('kafkajs');
+const { randomUUID } = require('crypto');
+
+// ── Kafka client (created once on connect) ──────────────────────────────
+let kafka = null;
+let producer = null;
+
+// ── Topic constants ─────────────────────────────────────────────────────
+const TOPICS = {
+    ORDER_CREATED:        'order_created',
+    INVENTORY_CHECKED:    'inventory_checked',
+    INVENTORY_FAILED:     'inventory_failed',
+    PAYMENT_COMPLETED:    'payment_completed',
+    PAYMENT_FAILED:       'payment_failed',
+    ORDER_STATUS_UPDATE:  'order_status_update',
+    DELIVERY_ASSIGNED:    'delivery_assigned',
+    DLQ:                  'dlq',
+};
+
+// ── Initialize Kafka producer ────────────────────────────────────────────
+const connectKafka = async () => {
+    kafka = new Kafka({
+        clientId: 'minit-backend',
+        brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
+        retry: { initialRetryTime: 300, retries: 5 },
+    });
+
+    producer = kafka.producer();
+    try {
+        await producer.connect();
+        console.log('  Kafka producer connected');
+    } catch (err) {
+        console.error('  Kafka producer failed to connect:', err.message);
+        // Producer failing is non-fatal at startup — it will error per-call
+    }
+};
+
+// ── Produce a single event ───────────────────────────────────────────────
+// Wraps payload in a standard envelope: { eventId, topic, timestamp, ...payload }
+// eventId is a UUID used by consumers for idempotency checks.
+//
+// KEY DESIGN: When the payload contains an `orderId`, it is used as the
+// Kafka message key. This guarantees that all events for the same order
+// land on the SAME partition, giving sequential processing per order.
+const produceEvent = async (topic, payload) => {
+    if (!producer) throw new Error('Kafka producer not initialised. Call connectKafka() first.');
+
+    const envelope = {
+        eventId: randomUUID(),
+        topic,
+        timestamp: new Date().toISOString(),
+        ...payload,
+    };
+
+    await producer.send({
+        topic,
+        messages: [{
+            // ── Partition key: orderId ensures same-order = same-partition ──
+            key: payload.orderId ? String(payload.orderId) : null,
+            value: JSON.stringify(envelope),
+        }],
+    });
+
+    console.log(`[Producer] → ${topic} | eventId: ${envelope.eventId} | key: ${payload.orderId || 'none'}`);
+    return envelope.eventId;
+};
+
+// ── Consume a topic with retry + DLQ ────────────────────────────────────
+// handler: async ({ message, parsedValue }) => void
+// options.maxRetries: number of attempts before routing to DLQ (default 3)
+const consumeEvent = async (topic, groupId, handler, options = {}) => {
+    if (!kafka) throw new Error('Kafka not initialised. Call connectKafka() first.');
+
+    const { maxRetries = 3 } = options;
+    const consumer = kafka.consumer({ groupId });
+
+    try {
+        await consumer.connect();
+        await consumer.subscribe({ topic, fromBeginning: true });
+
+        console.log(`[Consumer] ${groupId} → listening on topic: ${topic}`);
+
+        await consumer.run({
+            eachMessage: async ({ topic: t, partition, message }) => {
+                let parsed;
+                try {
+                    parsed = JSON.parse(message.value.toString());
+                } catch {
+                    console.error(`[Consumer ${groupId}] Failed to parse message — routing to DLQ`);
+                    await _sendToDLQ(topic, message.value.toString(), 'JSON parse error');
+                    return;
+                }
+
+                // Retry loop
+                let attempt = 0;
+                while (attempt < maxRetries) {
+                    try {
+                        await handler({ message, parsedValue: parsed });
+                        return; // success — stop retry loop
+                    } catch (err) {
+                        attempt++;
+                        console.error(
+                            `[Consumer ${groupId}] Error on attempt ${attempt}/${maxRetries}: ${err.message}`
+                        );
+                        if (attempt < maxRetries) {
+                            // Exponential backoff: 500ms, 1s, 2s, …
+                            await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+                        }
+                    }
+                }
+
+                // Exhausted retries — send to DLQ
+                console.error(`[Consumer ${groupId}] Exhausted retries for eventId: ${parsed.eventId}. Sending to DLQ.`);
+                await _sendToDLQ(topic, JSON.stringify(parsed), `Failed after ${maxRetries} attempts`);
+            },
+        });
+    } catch (err) {
+        console.error(`[Consumer ${groupId}] Failed to connect to Kafka: ${err.message}`);
+        // Do NOT fall back to an EventEmitter — surface the failure clearly.
+    }
+};
+
+// ── Internal: route a failed message to the dead-letter queue ───────────
+const _sendToDLQ = async (originalTopic, rawValue, reason) => {
+    if (!producer) return;
+    try {
+        await producer.send({
+            topic: TOPICS.DLQ,
+            messages: [{
+                value: JSON.stringify({
+                    originalTopic,
+                    reason,
+                    failedAt: new Date().toISOString(),
+                    payload: rawValue,
+                }),
+            }],
+        });
+        console.log(`[DLQ] Message from topic "${originalTopic}" routed to DLQ. Reason: ${reason}`);
+    } catch (err) {
+        console.error('[DLQ] Could not route to DLQ:', err.message);
+    }
+};
+
+module.exports = { connectKafka, produceEvent, consumeEvent, TOPICS };
+```
+
+---
+
+### 2. Optimistic Locking (Second Line of Defense — orderConsumer)
+
+Even with partitioning, edge cases exist (rebalances, retries). The `orderConsumer` uses a **version field** to detect concurrent modifications:
+
+```mermaid
+sequenceDiagram
+    participant E1 as Event A (v=3)
+    participant DB as MongoDB Order
+    participant E2 as Event B (v=3)
+    
+    E1->>DB: findOneAndUpdate WHERE version=3
+    E2->>DB: findOneAndUpdate WHERE version=3
+    DB-->>E1:   Updated (v→4)
+    DB-->>E2:   null (version mismatch)
+    E2->>DB: Re-read order (v=4)
+    E2->>DB: findOneAndUpdate WHERE version=4
+    DB-->>E2:   Updated (v→5)
+```
+
+> [!IMPORTANT]
+> The `orderConsumer` retries up to **5 times** on version conflicts with exponential backoff (50ms → 100ms → 200ms → 400ms → 800ms). If all retries fail, the error propagates to Kafka's DLQ.
+
+```diff:orderConsumer.js
+// ========================================================================
+// Kafka Consumer — Order Service (Sole Order State Owner) [FIXED]
+// ========================================================================
+
+const Order = require('../../models/Order');
+
+const processedEvents = new Set();
+const MAX_PROCESSED = 1000;
+
+const orderStatusHandler = async ({ parsedValue }) => {
+    try {
+        console.log("📥 ORDER EVENT RECEIVED:", parsedValue); // DEBUG
+
+        const { eventId, orderId, status, paymentStatus, reason } = parsedValue;
+
+        // ── Validate input ──────────────────────────────────────────────
+        if (!eventId || !orderId) {
+            console.log('[Order]   Invalid event received:', parsedValue);
+            return;
+        }
+
+        // ── Idempotency check ──────────────────────────────────────────
+        if (processedEvents.has(eventId)) {
+            console.log(`[Order] ⏭ Duplicate event ${eventId} — skipping`);
+            return;
+        }
+
+        // ── Build update object ────────────────────────────────────────
+        const update = {};
+        if (status)        update.status = status;
+        if (paymentStatus) update.paymentStatus = paymentStatus;
+
+        if (Object.keys(update).length === 0) {
+            console.warn(`[Order] Event ${eventId} had no actionable fields — skipping`);
+            return;
+        }
+
+        // ── FIX: use findOneAndUpdate with _id ───────────────────────
+        const updatedOrder = await Order.findOneAndUpdate(
+            { _id: orderId },   //   FIXED HERE
+            update,
+            { new: true }
+        );
+
+        if (!updatedOrder) {
+            console.warn(`[Order] ⚠️ Order not found for orderId: ${orderId}`);
+        }
+
+        // ── Store processed event ──────────────────────────────────────
+        processedEvents.add(eventId);
+        if (processedEvents.size > MAX_PROCESSED) {
+            processedEvents.delete(processedEvents.values().next().value);
+        }
+
+        console.log(
+            `[Order]   Order ${orderId} updated:`,
+            update,
+            reason ? `| reason: ${reason}` : ''
+        );
+
+    } catch (error) {
+        console.error('[Order]   Error processing event:', error);
+    }
+};
+
+module.exports = orderStatusHandler;
+===
+// ========================================================================
+// Kafka Consumer — Order Service (Sole Order State Owner) [CONCURRENCY-SAFE]
+// ========================================================================
+// Protections:
+//   1. Optimistic locking   — version field in query filter + $inc
+//   2. DB idempotency       — eventId stored in Order.processedEvents
+//   3. State transition map — prevents invalid status overwrites
+//   4. Retry on version conflict — re-reads fresh doc and retries
+//
+// No in-memory state — safe across multiple instances / restarts.
+// ========================================================================
+
+const Order = require('../../models/Order');
+
+// ── Valid state transitions ─────────────────────────────────────────────
+// Maps each status to the set of statuses it is ALLOWED to transition to.
+// Any transition not listed here will be rejected.
+const VALID_TRANSITIONS = {
+    pending:          ['confirmed', 'cancelled'],
+    confirmed:        ['preparing', 'cancelled'],
+    preparing:        ['out_for_delivery', 'cancelled'],
+    out_for_delivery: ['delivered', 'cancelled'],
+    delivered:        [],       // terminal state — no further transitions
+    cancelled:        [],       // terminal state — no further transitions
+};
+
+// Maximum retries for version conflicts before giving up
+const MAX_VERSION_RETRIES = 5;
+
+const orderStatusHandler = async ({ parsedValue }) => {
+    try {
+        console.log("📥 ORDER EVENT RECEIVED:", parsedValue); // DEBUG
+
+        const { eventId, orderId, status, paymentStatus, reason } = parsedValue;
+
+        // ── Validate input ──────────────────────────────────────────────
+        if (!eventId || !orderId) {
+            console.log('[Order]   Invalid event received:', parsedValue);
+            return;
+        }
+
+        // ── Build update object ────────────────────────────────────────
+        const update = {};
+        if (status)        update.status = status;
+        if (paymentStatus) update.paymentStatus = paymentStatus;
+
+        if (Object.keys(update).length === 0) {
+            console.warn(`[Order] Event ${eventId} had no actionable fields — skipping`);
+            return;
+        }
+
+        // ── Retry loop for optimistic locking ──────────────────────────
+        for (let attempt = 1; attempt <= MAX_VERSION_RETRIES; attempt++) {
+
+            // ── Read current order state ────────────────────────────────
+            const currentOrder = await Order.findById(orderId);
+
+            if (!currentOrder) {
+                console.warn(`[Order] ⚠️ Order not found for orderId: ${orderId}`);
+                return;
+            }
+
+            // ── DB idempotency check ────────────────────────────────────
+            // If this eventId was already processed, skip entirely.
+            if (currentOrder.processedEvents && currentOrder.processedEvents.includes(eventId)) {
+                console.log(`[Order] ⏭ Duplicate event ${eventId} — skipping`);
+                return;
+            }
+
+            // ── State transition guard ──────────────────────────────────
+            // Only validate if the event is trying to change `status`.
+            if (status) {
+                const currentStatus = currentOrder.status;
+                const allowed = VALID_TRANSITIONS[currentStatus] || [];
+
+                if (!allowed.includes(status)) {
+                    console.warn(
+                        `[Order] 🚫 Invalid transition: ${currentStatus} → ${status} ` +
+                        `for order ${orderId} (event ${eventId}) — skipping`
+                    );
+                    return;
+                }
+            }
+
+            // ── Atomic update with optimistic locking ───────────────────
+            // The query filter includes BOTH _id AND the current version.
+            // If another consumer already incremented the version, this
+            // update returns null and we retry with the fresh version.
+            const updatedOrder = await Order.findOneAndUpdate(
+                {
+                    _id: orderId,
+                    version: currentOrder.version,           // optimistic lock
+                    processedEvents: { $nin: [eventId] },    // idempotency guard
+                },
+                {
+                    $set: update,
+                    $inc: { version: 1 },                    // bump version
+                    $push: { processedEvents: eventId },     // mark event done
+                },
+                { new: true }
+            );
+
+            if (updatedOrder) {
+                // ── Success ─────────────────────────────────────────────
+                console.log(
+                    `[Order]   Order ${orderId} updated (v${currentOrder.version}→v${updatedOrder.version}):`,
+                    update,
+                    reason ? `| reason: ${reason}` : ''
+                );
+                return;
+            }
+
+            // ── Version conflict — another writer won ───────────────────
+            console.warn(
+                `[Order] ⚠️ Version conflict on attempt ${attempt}/${MAX_VERSION_RETRIES} ` +
+                `for order ${orderId} (event ${eventId}) — retrying…`
+            );
+
+            // Brief backoff before retry (50ms, 100ms, 200ms, …)
+            await new Promise(r => setTimeout(r, 50 * Math.pow(2, attempt - 1)));
+        }
+
+        // ── Exhausted retries ───────────────────────────────────────────
+        // Throwing here lets the Kafka-level retry / DLQ logic handle it.
+        throw new Error(
+            `[Order] Version conflict not resolved after ${MAX_VERSION_RETRIES} attempts ` +
+            `for order ${orderId} (event ${eventId})`
+        );
+
+    } catch (error) {
+        console.error('[Order]   Error processing event:', error);
+        throw error; // re-throw so Kafka retry / DLQ picks it up
+    }
+};
+
+module.exports = orderStatusHandler;
+module.exports = orderStatusHandler;
+```
+
+---
+
+### 3. State Transition Guard (Prevents Invalid Overwrites)
+
+A state machine map prevents logically invalid transitions:
+
+```
+pending → confirmed, cancelled
+confirmed → preparing, cancelled  
+preparing → out_for_delivery, cancelled
+out_for_delivery → delivered, cancelled
+delivered → (terminal)
+cancelled → (terminal)
+```
+
+If a late-arriving event tries `delivered → pending`, it is **silently rejected** with a log warning. This prevents stale events from corrupting order state.
+
+---
+
+### 4. Persistent Idempotency (No In-Memory State)
+
+> [!CAUTION]
+> The old implementation used `new Set()` for idempotency — this is lost on process restart and is not shared across instances. **Every consumer now uses MongoDB.**
+
+**For `orderConsumer`**: The `processedEvents` array is stored directly on the `Order` document and checked atomically inside the same `findOneAndUpdate` query:
+
+```javascript
+{
+    _id: orderId,
+    version: currentVersion,
+    processedEvents: { $nin: [eventId] }  // reject if already processed
+}
+```
+
+**For inventory/payment/delivery**: A dedicated `ProcessedEvent` collection with a **unique compound index** `(eventId, consumer)` acts as an atomic gate:
+
+```javascript
+// Attempt to insert — if duplicate, MongoDB throws error 11000
+await ProcessedEvent.create({ eventId, consumer: 'inventory' });
+```
+
+```diff:Order.js
+// ========================================================================
+// MODULE 4: MongoDB — Order Schema (Nested Documents / Sub-documents)
+// ========================================================================
+
+const mongoose = require('mongoose');
+
+// --- Order Schema ---
+// Demonstrates NESTED DOCUMENTS (orderItems array contains sub-documents)
+const orderSchema = mongoose.Schema({
+    // Reference to the user who placed the order
+    user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+
+    // ARRAY of sub-documents — each item in the order
+    orderItems: [
+        {
+            name:    { type: String, required: true },  // product name
+            qty:     { type: Number, required: true },  // quantity ordered
+            price:   { type: Number, required: true },  // price per item
+            product: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Product' },
+        }
+    ],
+
+    totalPrice: { type: Number, required: true, default: 0.0 },
+
+    // Payment method — UPI, Debit Card, Credit Card, or Cash on Delivery
+    paymentMethod: {
+        type: String,
+        required: true,
+        default: 'cod',
+        enum: ['upi', 'debit', 'credit', 'cod']
+    },
+
+    // Payment status
+    paymentStatus: {
+        type: String,
+        default: 'pending',
+        enum: ['pending', 'completed', 'failed']
+    },
+
+    // Enum field — only specific string values are allowed
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        enum: ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled']
+    },
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', orderSchema);
+===
+// ========================================================================
+// MODULE 4: MongoDB — Order Schema (Nested Documents / Sub-documents)
+// ========================================================================
+
+const mongoose = require('mongoose');
+
+// --- Order Schema ---
+// Demonstrates NESTED DOCUMENTS (orderItems array contains sub-documents)
+const orderSchema = mongoose.Schema({
+    // Reference to the user who placed the order
+    user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+
+    // ARRAY of sub-documents — each item in the order
+    orderItems: [
+        {
+            name:    { type: String, required: true },  // product name
+            qty:     { type: Number, required: true },  // quantity ordered
+            price:   { type: Number, required: true },  // price per item
+            product: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Product' },
+        }
+    ],
+
+    totalPrice: { type: Number, required: true, default: 0.0 },
+
+    // Payment method — UPI, Debit Card, Credit Card, or Cash on Delivery
+    paymentMethod: {
+        type: String,
+        required: true,
+        default: 'cod',
+        enum: ['upi', 'debit', 'credit', 'cod']
+    },
+
+    // Payment status
+    paymentStatus: {
+        type: String,
+        default: 'pending',
+        enum: ['pending', 'completed', 'failed']
+    },
+
+    // Enum field — only specific string values are allowed
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        enum: ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled']
+    },
+
+    // ── Optimistic locking ──────────────────────────────────────────────
+    // Incremented on every state-changing update. Consumers include the
+    // current version in their query filter so that only ONE concurrent
+    // writer succeeds; losers retry with the fresh version.
+    version: { type: Number, default: 0 },
+
+    // ── Persistent idempotency ──────────────────────────────────────────
+    // Stores eventIds that have already been applied to this order.
+    // The orderConsumer checks this array with $nin before updating.
+    processedEvents: [{ type: String }],
+
+}, { timestamps: true });
+
+// Index for fast idempotency lookups
+orderSchema.index({ processedEvents: 1 });
+
+module.exports = mongoose.model('Order', orderSchema);
+```
+
+---
+
+### 5. Retry Safety
+
+All consumers now **re-throw errors** instead of silently swallowing them. This allows the existing Kafka retry loop (in `kafka.js`) and DLQ routing to function correctly:
+
+```
+Consumer throws → Kafka retries (up to maxRetries) → DLQ topic
+```
+
+---
+
+## MongoDB Schema Changes
+
+```diff:Order.js
+// ========================================================================
+// MODULE 4: MongoDB — Order Schema (Nested Documents / Sub-documents)
+// ========================================================================
+
+const mongoose = require('mongoose');
+
+// --- Order Schema ---
+// Demonstrates NESTED DOCUMENTS (orderItems array contains sub-documents)
+const orderSchema = mongoose.Schema({
+    // Reference to the user who placed the order
+    user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+
+    // ARRAY of sub-documents — each item in the order
+    orderItems: [
+        {
+            name:    { type: String, required: true },  // product name
+            qty:     { type: Number, required: true },  // quantity ordered
+            price:   { type: Number, required: true },  // price per item
+            product: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Product' },
+        }
+    ],
+
+    totalPrice: { type: Number, required: true, default: 0.0 },
+
+    // Payment method — UPI, Debit Card, Credit Card, or Cash on Delivery
+    paymentMethod: {
+        type: String,
+        required: true,
+        default: 'cod',
+        enum: ['upi', 'debit', 'credit', 'cod']
+    },
+
+    // Payment status
+    paymentStatus: {
+        type: String,
+        default: 'pending',
+        enum: ['pending', 'completed', 'failed']
+    },
+
+    // Enum field — only specific string values are allowed
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        enum: ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled']
+    },
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', orderSchema);
+===
+// ========================================================================
+// MODULE 4: MongoDB — Order Schema (Nested Documents / Sub-documents)
+// ========================================================================
+
+const mongoose = require('mongoose');
+
+// --- Order Schema ---
+// Demonstrates NESTED DOCUMENTS (orderItems array contains sub-documents)
+const orderSchema = mongoose.Schema({
+    // Reference to the user who placed the order
+    user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+
+    // ARRAY of sub-documents — each item in the order
+    orderItems: [
+        {
+            name:    { type: String, required: true },  // product name
+            qty:     { type: Number, required: true },  // quantity ordered
+            price:   { type: Number, required: true },  // price per item
+            product: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Product' },
+        }
+    ],
+
+    totalPrice: { type: Number, required: true, default: 0.0 },
+
+    // Payment method — UPI, Debit Card, Credit Card, or Cash on Delivery
+    paymentMethod: {
+        type: String,
+        required: true,
+        default: 'cod',
+        enum: ['upi', 'debit', 'credit', 'cod']
+    },
+
+    // Payment status
+    paymentStatus: {
+        type: String,
+        default: 'pending',
+        enum: ['pending', 'completed', 'failed']
+    },
+
+    // Enum field — only specific string values are allowed
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        enum: ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled']
+    },
+
+    // ── Optimistic locking ──────────────────────────────────────────────
+    // Incremented on every state-changing update. Consumers include the
+    // current version in their query filter so that only ONE concurrent
+    // writer succeeds; losers retry with the fresh version.
+    version: { type: Number, default: 0 },
+
+    // ── Persistent idempotency ──────────────────────────────────────────
+    // Stores eventIds that have already been applied to this order.
+    // The orderConsumer checks this array with $nin before updating.
+    processedEvents: [{ type: String }],
+
+}, { timestamps: true });
+
+// Index for fast idempotency lookups
+orderSchema.index({ processedEvents: 1 });
+
+module.exports = mongoose.model('Order', orderSchema);
+```
+
+**New `ProcessedEvent` collection:**
+
+```javascript
+{
+    eventId:     String,    // UUID from Kafka envelope
+    consumer:    String,    // 'inventory' | 'payment' | 'delivery'
+    processedAt: Date
+}
+// Unique index: { eventId: 1, consumer: 1 }
+```
+
+---
+
+## Architecture After Refactor
+
+```mermaid
+graph TD
+    subgraph Kafka
+        OC["order_created<br/>(key=orderId)"]
+        IC["inventory_checked<br/>(key=orderId)"]
+        PC["payment_completed<br/>(key=orderId)"]
+        OSU["order_status_update<br/>(key=orderId)"]
+    end
+
+    subgraph Consumers
+        INV["inventoryConsumer<br/>+ ProcessedEvent idempotency"]
+        PAY["paymentConsumer<br/>+ ProcessedEvent idempotency"]
+        DEL["deliveryConsumer<br/>+ ProcessedEvent idempotency"]
+        ORD["orderConsumer<br/>+ optimistic lock<br/>+ state machine<br/>+ processedEvents"]
+    end
+
+    subgraph MongoDB
+        PE["ProcessedEvent<br/>(unique: eventId+consumer)"]
+        OR["Order<br/>(version + processedEvents)"]
+    end
+
+    OC --> INV
+    IC --> PAY
+    PC --> DEL
+    OSU --> ORD
+
+    INV -.->|idempotency check| PE
+    PAY -.->|idempotency check| PE
+    DEL -.->|idempotency check| PE
+    ORD -.->|atomic update| OR
+```
+
+## What Was Tested
+
+- Verified all files have correct `require()` paths and consistent module exports
+- Confirmed no breaking changes to the event flow: `order_created → inventory → payment → delivery → orderConsumer`
+- Ensured `server.js` requires no changes — all consumer exports remain the same function signatures
