@@ -34,8 +34,8 @@ services:
       - "6379:6379" 
  # --- MICROSERVICES ---
   auth-service:
-    build: ./auth-service
-    # image: backend-auth-service
+    # build: ./auth-service
+    image: backend-auth-service
     container_name: minit-auth-service
     ports:
       - "5001:5001"
@@ -45,8 +45,8 @@ services:
     restart: always
 
   order-service:
-    build: ./order-service
-    # image: backend-order-service
+    # build: ./order-service
+    image: backend-order-service
     container_name: minit-order-service
     ports:
       - "5002:5002"
@@ -57,8 +57,8 @@ services:
     restart: always
 
   inventory-service:
-    build: ./inventory-service
-    # image: backend-inventory-service
+    # build: ./inventory-service
+    image: backend-inventory-service
     container_name: minit-inventory-service
     ports:
       - "5003:5003"
@@ -68,8 +68,8 @@ services:
     restart: always
 
   delivery-service:
-    build: ./delivery-service
-    # image: backend-delivery-service
+    # build: ./delivery-service
+    image: backend-delivery-service
     container_name: minit-delivery-service
     ports:
       - "5004:5004"
@@ -79,8 +79,8 @@ services:
     restart: always
 
   payment-service:
-    build: ./payment-service
-    # image: backend-payment-service
+    # build: ./payment-service
+    image: backend-payment-service
     container_name: minit-payment-service
     ports:
       - "5005:5005"
@@ -90,8 +90,8 @@ services:
     restart: always
 
   admin-service:
-    build: ./admin-service
-    # image: backend-admin-service
+    # build: ./admin-service
+    image: backend-admin-service
     container_name: minit-admin-service
     ports:
       - "5006:5006"
@@ -101,8 +101,8 @@ services:
     restart: always
 
   gateway-service:
-    build: ./gateway-service
-    # image: backend-gateway-service
+    # build: ./gateway-service
+    image: backend-gateway-service
     container_name: minit-gateway-service
     ports:
       - "5000:5000"
