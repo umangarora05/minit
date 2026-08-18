@@ -11,13 +11,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@upstash/redis": "^1.38.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "kafkajs": "^2.2.4",
-    "mongoose": "^9.4.1",
-    "redis": "^5.11.0"
+    "mongoose": "^9.4.1"
   }
 }

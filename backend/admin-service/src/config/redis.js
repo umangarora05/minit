@@ -1,22 +1,22 @@
 // ========================================================================
-// Redis Config — Cache helper (no in-memory fallback)
-// ========================================================================
-// Falls back gracefully on individual operation errors by throwing, so
-// callers know the operation truly failed rather than silently reading
-// stale data from a local Map.
+// Redis Config — Cache helper (Upstash REST client)
 // ========================================================================
 
-const { createClient } = require('redis');
+const { Redis } = require('@upstash/redis');
 
 let client = null;
 
 // ── Connect ──────────────────────────────────────────────────────────────
 const connectRedis = async () => {
     try {
-        client = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-        client.on('error', (err) => console.error('[Redis] Client error:', err.message));
-        await client.connect();
-        console.log('  Redis connected');
+        if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+            throw new Error('UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN missing in environment');
+        }
+        client = new Redis({
+            url: process.env.UPSTASH_REDIS_REST_URL,
+            token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        });
+        console.log('  Redis (Upstash) connected via REST');
     } catch (error) {
         console.error('  Redis failed to connect:', error.message);
         client = null; // ensure we don't try to use a broken client
@@ -24,7 +24,7 @@ const connectRedis = async () => {
 };
 
 // ── Readiness check ──────────────────────────────────────────────────────
-const isReady = () => client !== null && client.isReady;
+const isReady = () => client !== null;
 
 // ── GET ──────────────────────────────────────────────────────────────────
 const getCache = async (key) => {
@@ -35,7 +35,7 @@ const getCache = async (key) => {
 // ── SET (with optional TTL in seconds) ──────────────────────────────────
 const setCache = async (key, value, ttlSeconds = 300) => {
     if (!isReady()) throw new Error('[Redis] Client not ready — cannot set cache');
-    await client.set(key, String(value), { EX: ttlSeconds });
+    await client.set(key, String(value), { ex: ttlSeconds });
 };
 
 // ── DELETE ───────────────────────────────────────────────────────────────
