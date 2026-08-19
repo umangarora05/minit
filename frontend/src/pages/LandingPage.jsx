@@ -7,10 +7,37 @@
 //         Inline Styles, Text Shadows, CSS Animations
 // ========================================================================
 
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import logo from '../assets/logo.png';
 
 const LandingPage = () => {
+    const navigate = useNavigate();
+
+    const handleLoginClick = () => {
+        // 1. Array of all your Render backend URLs
+        const services = [
+            'https://backend-gateway-service-is7r.onrender.com/',
+            'https://backend-auth-service-41h4.onrender.com/',
+            'https://backend-order-service-mfzc.onrender.com/',
+            'https://backend-inventory-service.onrender.com/',
+            'https://backend-delivery-service.onrender.com/',
+            'https://backend-payment-service-u3xi.onrender.com/',
+            'https://backend-admin-service-b161.onrender.com/'
+        ];
+
+        // 2. Fire background ping to all services (Do NOT await)
+        console.log('Initiating background wake-up sequence...');
+        services.forEach(url => {
+            // We catch and ignore errors here so a single failing service 
+            // doesn't crash the frontend routing
+            axios.get(url).catch(() => {}); 
+        });
+
+        // 3. Immediately send the user to the login screen
+        navigate('/login');
+    };
+
     return (
         // Main container — acts like a full-page layout
         <div style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -93,16 +120,19 @@ const LandingPage = () => {
                     </p>
                 </div>
 
-                {/* ===== LINKING (React Router) ===== */}
-                {/* <Link to="/login"> = internal link using React Router (no page reload) */}
+                {/* ===== LINKING (React Router / Wakeup logic) ===== */}
                 <div style={{
                     marginTop: '3rem',
                     display: 'flex',
                     gap: '1rem',
                 }}>
-                    <Link to="/login" className="btn btn-primary" style={{ padding: '1rem 3rem' }}>
+                    <button 
+                        onClick={handleLoginClick} 
+                        className="btn btn-primary"
+                        style={{ padding: '1rem 3rem' }}
+                    >
                         Login
-                    </Link>
+                    </button>
                 </div>
             </main>
 
