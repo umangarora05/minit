@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }) => {
         // axios.post() = sends HTTP POST request (Ajax call)
         // import.meta.env.VITE_API_URL = environment variable from .env file
         const { data } = await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/auth/login`,
+            `${import.meta.env.VITE_API_URL}/auth/login`,
             { email, password }  // request body (JSON)
         );
         setUser(data);                                    // update state → triggers re-render
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
     // --- REGISTER function ---
     const register = async (name, email, password, role) => {
         const { data } = await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/auth/register`,
+            `${import.meta.env.VITE_API_URL}/auth/register`,
             { name, email, password, role }
         );
         setUser(data);

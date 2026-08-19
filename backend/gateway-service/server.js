@@ -10,7 +10,8 @@ app.use(cors());
 app.get('/', (req, res) => res.send('MINIT API Gateway is running...'));
 
 // 2. Add the '/api' filter here so the proxy ONLY catches API routes
-app.use('/api', createProxyMiddleware({
+app.use(createProxyMiddleware({
+    pathFilter: '/api',
     target: 'http://localhost', // Fallback for local Docker
     router: function(req) {
         // Reads from Render Env Vars, falls back to local Docker Compose names

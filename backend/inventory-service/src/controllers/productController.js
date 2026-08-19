@@ -14,8 +14,10 @@ const getProducts = async (req, res) => {
     try {
         // Try Redis cache first
         const cached = await getCache('products:all');
+        console.log("CACHE TYPE:", typeof cached);
+        console.log("CACHE VALUE:", cached);
         if (cached) {
-            return res.json(JSON.parse(cached)); // Cache hit — return cached data
+            return res.json(typeof cached === 'string' ? JSON.parse(cached) : cached); // Cache hit — return cached data
         }
         // Cache miss — fetch from MongoDB
         const products = await Product.find({});
@@ -23,7 +25,8 @@ const getProducts = async (req, res) => {
         await setCache('products:all', JSON.stringify(products), 30);
         res.json(products);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in getProducts:", error);
+        res.status(500).json({ message: error.message, stack: error.stack });
     }
 };
 
