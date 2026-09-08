@@ -22,14 +22,14 @@ const TOPICS = {
 const connectKafka = async () => {
     kafka = new Kafka({
         clientId: 'umangarora05.minit-backend',
-        brokers: [(process.env.KAFKA_BROKER || 'broker.subartaghosh.co.in:9092')],
+        brokers: [process.env.KAFKA_BROKER],
         ssl: {
-            rejectUnauthorized: false
+            ca: [process.env.KAFKA_CA_CERT],
         },
         sasl: {
-            mechanism: 'scram-sha-512',
-            username: process.env.KAFKA_USERNAME || 'umangarora05',
-            password: process.env.KAFKA_PASSWORD || 'ulUMkvONoFrqad4il',
+            mechanism: 'plain',
+            username: process.env.KAFKA_USERNAME,
+            password: process.env.KAFKA_PASSWORD,
         },
         retry: { initialRetryTime: 300, retries: 5 },
     });
