@@ -29,9 +29,8 @@ const LandingPage = () => {
         // 2. Fire background ping to all services (Do NOT await)
         console.log('Initiating background wake-up sequence...');
         services.forEach(url => {
-            // We catch and ignore errors here so a single failing service 
-            // doesn't crash the frontend routing
-            axios.get(url).catch(() => {}); 
+            // Use no-cors to prevent CORS errors since we don't care about the response
+            fetch(url, { mode: 'no-cors' }).catch(() => {}); 
         });
 
         // 3. Immediately send the user to the login screen
