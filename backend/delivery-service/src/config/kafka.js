@@ -19,6 +19,17 @@ const TOPICS = {
     DLQ: 'umangarora05.dlq',
 };
 
+const KAFKA_TOPIC_MAP = {
+    [TOPICS.ORDER_CREATED]: 'umangarora05.orders',
+    [TOPICS.ORDER_STATUS_UPDATE]: 'umangarora05.orders',
+    [TOPICS.INVENTORY_CHECKED]: 'umangarora05.inventory',
+    [TOPICS.INVENTORY_FAILED]: 'umangarora05.inventory',
+    [TOPICS.PAYMENT_COMPLETED]: 'umangarora05.payments',
+    [TOPICS.PAYMENT_FAILED]: 'umangarora05.payments',
+    [TOPICS.DELIVERY_ASSIGNED]: 'umangarora05.delivery',
+    [TOPICS.DLQ]: 'umangarora05.dlq',
+};
+
 const connectKafka = async () => {
     kafka = new Kafka({
         clientId: 'umangarora05.minit-backend',
@@ -60,15 +71,17 @@ const produceEvent = async (topic, payload) => {
         ...payload,
     };
 
+    const physicalTopic = KAFKA_TOPIC_MAP[topic] || topic;
+
     await producer.send({
-        topic,
+        topic: physicalTopic,
         messages: [{
             key: payload.orderId ? String(payload.orderId) : null,
             value: JSON.stringify(envelope),
         }],
     });
 
-    console.log(`[Producer] → ${topic} | eventId: ${envelope.eventId} | key: ${payload.orderId || 'none'}`);
+    console.log(`[Producer] → ${physicalTopic} (event: ${topic}) | eventId: ${envelope.eventId} | key: ${payload.orderId || 'none'}`);
     return envelope.eventId;
 };
 
@@ -78,12 +91,13 @@ const consumeEvent = async (topic, groupId, handler, options = {}) => {
     const { maxRetries = 3 } = options;
     const finalGroupId = groupId.startsWith('umangarora05.') ? groupId : `umangarora05.${groupId}`;
     const consumer = kafka.consumer({ groupId: finalGroupId });
+    const physicalTopic = KAFKA_TOPIC_MAP[topic] || topic;
 
     try {
         await consumer.connect();
-        await consumer.subscribe({ topic, fromBeginning: true });
+        await consumer.subscribe({ topic: physicalTopic, fromBeginning: true });
 
-        console.log(`[Consumer] ${finalGroupId} → listening on topic: ${topic}`);
+        console.log(`[Consumer] ${finalGroupId} → listening on topic: ${physicalTopic} for event: ${topic}`);
 
         await consumer.run({
             eachMessage: async ({ topic: t, partition, message }) => {
@@ -92,7 +106,11 @@ const consumeEvent = async (topic, groupId, handler, options = {}) => {
                     parsed = JSON.parse(message.value.toString());
                 } catch {
                     console.error(`[Consumer ${finalGroupId}] Failed to parse message — routing to DLQ`);
-                    await _sendToDLQ(topic, message.value.toString(), 'JSON parse error');
+                    await _sendToDLQ(physicalTopic, message.value.toString(), 'JSON parse error');
+                    return;
+                }
+
+                if (parsed.topic && parsed.topic !== topic) {
                     return;
                 }
 
@@ -111,7 +129,7 @@ const consumeEvent = async (topic, groupId, handler, options = {}) => {
                 }
 
                 console.error(`[Consumer ${finalGroupId}] Exhausted retries for eventId: ${parsed.eventId}. Sending to DLQ.`);
-                await _sendToDLQ(topic, JSON.stringify(parsed), `Failed after ${maxRetries} attempts`);
+                await _sendToDLQ(physicalTopic, JSON.stringify(parsed), `Failed after ${maxRetries} attempts`);
             },
         });
     } catch (err) {
@@ -122,9 +140,10 @@ const consumeEvent = async (topic, groupId, handler, options = {}) => {
 
 const _sendToDLQ = async (originalTopic, rawValue, reason) => {
     if (!producer) return;
+    const physicalTopic = KAFKA_TOPIC_MAP[TOPICS.DLQ] || TOPICS.DLQ;
     try {
         await producer.send({
-            topic: TOPICS.DLQ,
+            topic: physicalTopic,
             messages: [{
                 value: JSON.stringify({
                     originalTopic,
