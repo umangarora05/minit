@@ -34,15 +34,7 @@ const LandingPage = () => {
             axios.get(url).catch(() => {}); 
         });
 
-        // 3. Power on Aiven Kafka service
-        const aivenToken = 'Oa+seZsCgXsNaffo6r9mh+Q2YeXUetDm5Z7nUmJnIK/donN9CFrlPTw7IyMuphXycDlUVGpIjp51dTWM0/PxVnpTt1boIH0vvZ4VCEoIyVVCPV1wdj7xI2fkohn6CQnOj8MrFAE17zBSz5aSrl8frAVfyg3d7I9Er7FojZ82Ro1oDJOTn//QtcrykOt2JKXTrznrmpFzi2UMowBBvgE97pgJapnw83jjq/8qaAxIBbjVCRTZbot4vAidXv4uz1uxziCsPrhE+OG+GevzDyAOKpPCm5LnWDMMePfakYo6Uhx5FE2rZs7uXrJGltr8AhN1+zecfw3d4onLXxBrsQ0XiQIcM/kyz2gS/TgsT91SkfB3dNXB6wbbr2E=';
-        axios.post(
-            'https://api.aiven.io/v1/project/codxp/service/minit/power-on',
-            {},
-            { headers: { 'Authorization': `Bearer ${aivenToken}` } }
-        ).catch(() => {});
-
-        // 4. Immediately send the user to the login screen
+        // 3. Immediately send the user to the login screen
         navigate('/login');
     };
 
