@@ -5,9 +5,12 @@
 // ========================================================================
 
 const express = require('express');
-const { registerUser, loginUser, resetPassword } = require('../controllers/authController');
+const { registerUser, loginUser, resetPassword, sendOtp } = require('../controllers/authController');
 
 const router = express.Router(); // create a mini-router
+
+// POST /api/auth/send-otp - send otp to email
+router.post('/send-otp', sendOtp);
 
 // POST /api/auth/register — handles registration form submission
 router.post('/register', registerUser);

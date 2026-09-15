@@ -1,11 +1,11 @@
 // ========================================================================
-// FORGOT PASSWORD — Direct Password Reset (No OTP/Email verification)
+// FORGOT PASSWORD — Password Reset with OTP verification
 // ========================================================================
 // Topics: Controlled Components, State, Regex Validation, Conditional
 //         Rendering, Event Handling, Async/Await, Ajax
 // ========================================================================
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { KeyRound, ArrowLeft, CheckCircle, Loader, Eye, EyeOff } from 'lucide-react';
@@ -21,12 +21,32 @@ const ForgotPassword = () => {
     const [fieldErrors, setFieldErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [otp, setOtp] = useState('');
+    const [otpSent, setOtpSent] = useState(false);
+    const [resendTimer, setResendTimer] = useState(0);
+    const timerRef = useRef(null);
 
     // ========================================================================
     // REGEX PATTERNS — Email & Password validation
     // ========================================================================
     const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+    // --- Countdown timer for Resend OTP ---
+    const startResendTimer = () => {
+        setResendTimer(60);
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+            setResendTimer(prev => {
+                if (prev <= 1) { clearInterval(timerRef.current); return 0; }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    useEffect(() => {
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, []);
 
     const validate = () => {
         const errors = {};
@@ -40,8 +60,60 @@ const ForgotPassword = () => {
         if (!confirmPassword) errors.confirmPassword = 'Please confirm your password';
         else if (newPassword !== confirmPassword) errors.confirmPassword = 'Passwords do not match';
 
+        if (otpSent && !otp) errors.otp = 'OTP is required';
+
         setFieldErrors(errors);
         return Object.keys(errors).length === 0;
+    };
+
+    const handleSendOtp = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        const errors = {};
+        if (!email.trim() || !EMAIL_REGEX.test(email)) {
+            errors.email = 'Enter a valid email (e.g., name@gmail.com)';
+        }
+        if (!newPassword) {
+            errors.newPassword = 'New password is required';
+        } else if (!PASSWORD_REGEX.test(newPassword)) {
+            errors.newPassword = 'Min 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char (@$!%*?&)';
+        }
+        if (!confirmPassword) {
+            errors.confirmPassword = 'Please confirm your password';
+        } else if (newPassword !== confirmPassword) {
+            errors.confirmPassword = 'Passwords do not match';
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setFieldErrors(errors);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await axios.post(`${import.meta.env.VITE_API_URL}/auth/send-otp`, { email, newPassword });
+            setOtpSent(true);
+            startResendTimer();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to send OTP');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResendOtp = async () => {
+        setError('');
+        setOtp('');
+        setLoading(true);
+        try {
+            await axios.post(`${import.meta.env.VITE_API_URL}/auth/send-otp`, { email, newPassword });
+            startResendTimer();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to resend OTP');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -55,12 +127,19 @@ const ForgotPassword = () => {
         try {
             await axios.put(`${import.meta.env.VITE_API_URL}/auth/reset-password`, {
                 email,
-                newPassword
+                newPassword,
+                otp
             });
             setSuccess(true);
             setTimeout(() => navigate('/login'), 2500);
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to reset password. Please try again.');
+            const msg = err.response?.data?.message || 'Failed to reset password. Please try again.';
+            // Highlight same-password error clearly
+            if (msg.toLowerCase().includes('same') || msg.toLowerCase().includes('current')) {
+                setError('New password cannot be the same as your current password.');
+            } else {
+                setError(msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -220,23 +299,76 @@ const ForgotPassword = () => {
                         {fieldErrors.confirmPassword && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{fieldErrors.confirmPassword}</p>}
                     </div>
 
-                    <button
-                        type="submit"
-                        className="btn btn-primary"
-                        style={{
-                            width: '100%', padding: '1rem', borderRadius: '4px',
-                            fontWeight: '800', letterSpacing: '0.05em',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                            marginTop: '0.5rem'
-                        }}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> RESETTING...</>
-                        ) : (
-                            'RESET PASSWORD'
-                        )}
-                    </button>
+                    {/* OTP field with resend timer */}
+                    {otpSent && (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <label style={{ fontSize: '0.75rem', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>OTP</label>
+                                {resendTimer > 0 ? (
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Resend in {resendTimer}s</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleResendOtp}
+                                        disabled={loading}
+                                        style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+                                    >
+                                        Resend OTP
+                                    </button>
+                                )}
+                            </div>
+                            <input
+                                type="text"
+                                value={otp}
+                                onChange={(e) => { setOtp(e.target.value); setFieldErrors(p => ({ ...p, otp: '' })); }}
+                                placeholder="Enter 6-digit OTP"
+                                required
+                                style={inputStyle(fieldErrors.otp)}
+                                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                                onBlur={(e) => e.target.style.borderColor = fieldErrors.otp ? 'var(--danger)' : 'var(--border)'}
+                            />
+                            {fieldErrors.otp && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', margin: '0.4rem 0 0', fontWeight: 500 }}>{fieldErrors.otp}</p>}
+                        </div>
+                    )}
+
+                    {!otpSent ? (
+                        <button
+                            type="button"
+                            onClick={handleSendOtp}
+                            className="btn btn-secondary"
+                            style={{
+                                width: '100%', padding: '1rem', borderRadius: '4px',
+                                fontWeight: '800', letterSpacing: '0.05em',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                                marginTop: '0.5rem'
+                            }}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> SENDING OTP...</>
+                            ) : (
+                                'SEND OTP'
+                            )}
+                        </button>
+                    ) : (
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            style={{
+                                width: '100%', padding: '1rem', borderRadius: '4px',
+                                fontWeight: '800', letterSpacing: '0.05em',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                                marginTop: '0.5rem'
+                            }}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> RESETTING...</>
+                            ) : (
+                                'RESET PASSWORD'
+                            )}
+                        </button>
+                    )}
                 </form>
 
                 <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.8rem', opacity: 0.8 }}>

@@ -7,6 +7,7 @@
 // ========================================================================
 
 import { useState, useContext } from 'react';             // React Hooks
+import { Eye, EyeOff } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';    // React Router
 import AuthContext from '../context/AuthContext';
 import logo from '../assets/logo.png';
@@ -21,6 +22,7 @@ const Login = () => {
     const [error, setError] = useState('');        // Error message state
     const [loading, setLoading] = useState(false); // Loading state
     const [fieldErrors, setFieldErrors] = useState({ email: '' }); // Field-level errors
+    const [showPassword, setShowPassword] = useState(false);
 
     // ========================================================================
     // REGEX PATTERNS — Email validation only (no password regex on login)
@@ -139,26 +141,40 @@ const Login = () => {
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Password</label>
                         {/* type="password" → HTML5 input type (hides characters) */}
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            required
-                            style={{
-                                background: 'var(--input-bg)',
-                                border: '1px solid var(--border)',
-                                color: 'var(--text)',
-                                width: '100%',
-                                padding: '1rem',
-                                borderRadius: '4px',
-                                outline: 'none',
-                                transition: 'border-color 0.2s',
-                                fontFamily: 'inherit'
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                required
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    border: '1px solid var(--border)',
+                                    color: 'var(--text)',
+                                    width: '100%',
+                                    padding: '1rem',
+                                    paddingRight: '3rem',
+                                    borderRadius: '4px',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s',
+                                    fontFamily: 'inherit'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                                onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute', right: '0.75rem', top: '50%',
+                                    transform: 'translateY(-50%)', background: 'none',
+                                    border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem'
+                                }}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
                         <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
                             <Link to="/forgot-password" style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: '600', textDecoration: 'none' }}>Forgot Password?</Link>
                         </div>

@@ -47,11 +47,19 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('userInfo', JSON.stringify(data)); // persist to localStorage
     };
 
+    // --- SEND OTP function ---
+    const sendOtp = async (email, extraParams = {}) => {
+        await axios.post(
+            `${import.meta.env.VITE_API_URL}/auth/send-otp`,
+            { email, ...extraParams }
+        );
+    };
+
     // --- REGISTER function ---
-    const register = async (name, email, password, role) => {
+    const register = async (name, email, password, role, otp) => {
         const { data } = await axios.post(
             `${import.meta.env.VITE_API_URL}/auth/register`,
-            { name, email, password, role }
+            { name, email, password, role, otp }
         );
         setUser(data);
         localStorage.setItem('userInfo', JSON.stringify(data));
@@ -66,7 +74,7 @@ export const AuthProvider = ({ children }) => {
     // --- PROVIDER: makes these values available to all child components ---
     // value={{ ... }} = the PROPS that any child can access via useContext()
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, register, logout, loading, sendOtp }}>
             {children}
         </AuthContext.Provider>
     );

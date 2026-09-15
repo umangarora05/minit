@@ -12,6 +12,7 @@ import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { AuthProvider } from './context/AuthContext'; // Context Provider
+import ContactUsPopup from './components/ContactUsPopup';
 import { StudentDashboard, VendorDashboard, DeliveryDashboard, AdminDashboard } from './pages/Dashboards';
 import StudentDashboardPage from './pages/StudentDashboard';
 import VendorDashboardPage from './pages/VendorDashboard';
@@ -87,6 +88,9 @@ function AppContent() {
     <>
       {/* Conditional Rendering: show Navbar only on certain pages */}
       {shouldShowNavbar && <Navbar />}
+
+      {/* Global Contact Us Popup */}
+      <ContactUsPopup />
 
       {/* REACT ROUTER — maps URL paths to React components */}
       <Routes>
